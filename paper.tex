@@ -1,0 +1,234 @@
+\documentclass[10pt,twocolumn]{article}
+
+% use the oxycomps style file
+\usepackage{oxycomps}
+
+% usage: \fixme[comments describing issue]{text to be fixed}
+% define \fixme as not doing anything special
+\newcommand{\fixme}[2][]{#2}
+% overwrite it so it shows up as red
+\renewcommand{\fixme}[2][]{\textcolor{red}{#2}}
+% overwrite it again so related text shows as footnotes
+%\renewcommand{\fixme}[2][]{\textcolor{red}{#2\footnote{#1}}}
+
+% read references.bib for the bibtex data
+\bibliography{references}
+
+% include metadata in the generated pdf file
+\pdfinfo{
+    /Title (Paper)
+    /Author (Gary Wang)
+}
+
+% set the title and author information
+\title{Paper}
+\author{Gary Wang}
+\affiliation{Occidental College}
+\email{}
+
+\begin{document}
+
+\maketitle
+
+
+\section{Introduction}
+
+The growing need for immersive and accessible property visualization presents a unique opportunity for innovation in 3D scene representation. In this project, I explore the use of *Turbo Splatting*—a recent and efficient variant of 3D Gaussian Splatting—as a novel approach to real estate visualization. Built on top of Scaffold Gaussian Splatting, Turbo Splatting is designed for speed and scalability, making it a promising candidate for fast, high-quality reconstruction of indoor environments.
+
+This work investigates the feasibility of applying Turbo Splatting to capture room interiors that can be viewed in 3D or virtual reality. The goal is to develop a system that allows real estate agents to quickly generate immersive visualizations of properties, giving potential clients a stronger sense of space and layout without requiring in-person visits. Such a tool could be especially useful for time-constrained buyers or those evaluating multiple listings remotely, offering a new layer of convenience and engagement in the property browsing experience.
+
+
+\section{Technical Background}
+
+The ability to reconstruct 3D scenes from images has wide-ranging applications, from virtual reality (VR) and robotic navigation to autonomous vehicles, 3D animation, and computer vision. Although it is a technically challenging task, 3D reconstruction is central to many modern technologies, and its importance is reflected in the rapid growth of research in this area.
+
+One promising direction within this field is 3D Gaussian Splatting, a relatively new method for representing radiance fields—a way of modeling how light behaves and interacts within a 3D scene. This technique has recently attracted attention for its combination of fast training times, real-time rendering capabilities, and high output quality. To understand the significance of 3D Gaussian Splatting, it is useful to first introduce the concept of radiance fields and how they are typically represented.
+
+Radiance fields capture the distribution of light in a scene and are generally divided into two broad categories: implicit and explicit representations \cite{chen2025survey3dgaussiansplatting}.
+
+In implicit radiance fields, the geometry of the scene is not stored directly. Instead, a function approximates how light flows through the scene. The most well-known example of this is Neural Radiance Fields (NeRFs), which use deep neural networks to take as input a position in 3D space (x, y, z) along with a viewing direction, and output an RGB color and an opacity value \cite{mildenhall2020nerfrepresentingscenesneural}. NeRFs are known for their impressive visual quality, but their downside is the slow training and rendering process. In the original paper, training a single scene on an NVIDIA V100 GPU could take between one and two days \cite{mildenhall2020nerfrepresentingscenesneural}. Subsequent efforts such as TensoRF by Anpei Chen et al. \cite{chen2022tensorftensorialradiancefields} aimed to speed things up by replacing neural networks with 4D tensors and using matrix decomposition, but these methods still fell short of achieving real-time usability.
+
+On the other hand, explicit radiance fields store the light and geometry information directly, using structures like voxel grids or collections of 3D points. Each point includes both its position and how it appears from different viewing directions. This makes rendering and access to the data much faster than in implicit methods. However, it often comes at the cost of significantly higher memory usage, which can reduce the quality of the output or limit the complexity of scenes that can be rendered \cite{chen2025survey3dgaussiansplatting}.
+
+3D Gaussian Splatting falls under the explicit category and builds on earlier techniques such as Elliptical Weighted Average (EWA) Splatting. In 2002, Zwicker et al. \cite{zwicker2002ewa} introduced a way to project elliptical Gaussians—also known as "splats"—onto a screen to render point-based or volumetric data. One of the key benefits of this approach was its ability to reduce aliasing artifacts—unwanted visual distortions such as jagged edges or flickering caused by insufficient sampling or resolution \cite{zwicker2002ewa}.
+
+The 2023 paper 3D Gaussian Splatting for Real-Time Radiance Field Rendering by Bernhard Kerbl \cite{kerbl20233dgaussiansplattingrealtime} is considered the foundational work in this area. It introduces three major innovations. First, it proposes the use of 3D Gaussians as a compact and expressive representation of a scene. Second, it outlines an optimization process that adjusts each Gaussian’s position, opacity, shape, and orientation (controlled through anisotropic covariance), as well as its color information (encoded using spherical harmonics). The method also includes mechanisms for managing point density, such as splitting or cloning Gaussians as needed. Third, the paper presents a differentiable rendering framework that allows the entire process to run in real-time. In evaluations, 3D Gaussian Splatting achieved training times of just 35 to 45 minutes on average—compared to 48 hours for NeRFs on the same hardware—while maintaining comparable visual quality \cite{kerbl20233dgaussiansplattingrealtime}.
+
+
+
+\section{Prior Work}
+Many achievements have already been made in the field of 3D Gaussian Splatting, with most efforts aimed at either accelerating training and rendering times or enhancing the visual quality of the final render. These improvements are particularly relevant to this project, which explores the use of Turbo Splatting—a fast and structured variant of Gaussian Splatting built upon Scaffold-GS—to efficiently reconstruct and visualize real estate interiors in 3D or VR. In this context, both speed and fidelity are important: the method must be able to generate scans quickly while preserving enough visual detail for users to inspect interiors remotely.
+
+Several works focus on improving output quality, which is especially important when users wish to zoom in on architectural or decorative details during a virtual walkthrough. Scaffold-GS by Tao Lu et al. addresses redundancy caused by the original method’s failure to consider scene geometry. For example, flat, texture less walls—common in interior spaces—can be modeled with fewer Gaussians. Scaffold-GS introduces three contributions: (1) the use of anchor points to group nearby Gaussians based on voxel-grid structure, (2) neural networks that generate Gaussian parameters conditioned on view direction and anchor features, and (3) a culling and growing strategy that evaluates local gradients and opacity to manage anchor points. The method consistently outperforms the baseline in areas with smooth textures, thin structures, and complex lighting—making it well-suited to indoor environments like the ones this project targets \cite{lu2023scaffoldgsstructured3dgaussians}.
+
+Mip Splatting tackles a different aspect of quality: zoom-level consistency. It highlights how naive zooming distorts Gaussian size when projected onto a 2D screen, leading to undesirable effects during interactive viewing. This is a significant issue in the context of real estate visualization, where users might zoom in to assess detail. Mip Splatting proposes modified 3D smoothing and 2D filtering techniques to reduce such aliasing and distortion, ensuring more stable visual output across scales \cite{yu2023mipsplattingaliasfree3dgaussian}. This can potentially contribute to my project as viewers of a 3D splat of a room may want to zoom in to observe details and reducing the distortion in the zoom would be beneficial. 
+
+Structure-Aware 3D Gaussian Splatting (SAGS) also focuses on the importance of incorporating scene structure. Like Scaffold-GS, it addresses problems such as floating Gaussians and loss of detail due to weak geometric constraints. SAGS differs by forming a point graph using K-nearest neighbors and applying graph neural networks to extract features that are then decoded into Gaussian parameters. This approach maintains state-of-the-art visual quality while reducing memory usage by up to 24×, which is beneficial for my project when reconstructing large properties with multiple rooms \cite{ververas2024sagsstructureaware3dgaussian}.
+
+While quality is essential, speed is the most critical factor for this project’s real-time use case. Turbo GS, which serves as the backbone of this work, builds on Scaffold-GS by improving the densification process. The original method relied solely on positional gradients to decide where to add Gaussians—an approach that fails in low-texture areas common in real estate scenes. Turbo GS addresses this by jointly considering position and color gradients, allowing the system to continue densifying even in flat or textureless regions. The method also introduces a selective densification strategy that adjusts the visitation threshold dynamically, reducing unnecessary computation while preserving essential details. This ability to quickly optimize realistic room reconstructions makes Turbo GS especially well-suited for real estate applications \cite{lu2024turbogsaccelerating3dgaussian}.
+
+Mini Splatting 2 takes a complementary approach to fast optimization. It identifies “critical” Gaussians—those that dominate blending weights from particular viewpoints—and aggressively clones them to better represent object surfaces. The method also incorporates culling based on accumulated visibility, improving rendering efficiency. While not used directly in this project, these techniques offer potential avenues for refinement, particularly in cases where important surfaces like countertops or furniture require more focused representation \cite{fang2024minisplatting2building360scenes}.
+
+Other works contribute ideas that, while not central, could still inform extensions to this project. MV Splat introduces a training scheme that functions effectively with sparse input images, which would be valuable if room scans are limited to a few photos \cite{Chen_2024}. 2D Gaussian Splatting replaces 3D ellipsoids with 2D discs that align tangentially to surface planes. This design may allow for cleaner surface representation in flat interior spaces and offers a conceptual shift that may enhance surface fidelity under certain conditions \cite{Huang2DGS2024}.
+
+\section{Methods}
+
+The traditional 3D Gaussian Splatting (3DGS) pipeline consists of three key components: initialization, optimization, and rendering. The process begins with structure-from-motion (SfM), which reconstructs the basic geometry of a scene using multiple images taken from different viewpoints. This step generates a sparse point cloud—a rough geometric skeleton of the scene. From this sparse cloud, 3D Gaussians are initialized, with each Gaussian defined by a position (mean), shape and orientation (covariance), and opacity \cite{kerbl20233dgaussiansplattingrealtime}.
+
+The optimization phase involves adjusting these Gaussian parameters to better match the appearance of the real scene. This is done through gradient descent, where the algorithm learns how to modify each Gaussian to reduce the error between the rendered image and the ground truth. During this phase, density control plays a critical role. Gaussians are either split (duplicated with slight perturbations) or cloned (copied outright) to increase coverage in regions that require more detail, while redundant Gaussians may be removed \cite{kerbl20233dgaussiansplattingrealtime}.
+
+Rendering is enabled by the EWA splatting framework introduced by Zwicker et al. \cite{zwicker2002ewa}, which makes it possible to project each 3D Gaussian onto a 2D image plane in a smooth and stable manner. This projection accounts for the viewer’s position and camera parameters, allowing Gaussians to be rendered correctly from any perspective. A fast tile-based rasterization method then blends these projected Gaussians using alpha blending, producing a final image that can be compared with the input photos to compute loss and guide the next optimization step \cite{kerbl20233dgaussiansplattingrealtime}.
+
+Turbo GS improves upon this pipeline by targeting two key areas: the initialization of Gaussians and the strategy used for densification during optimization. As discussed earlier, one of its major contributions is a more effective densification strategy. Traditional 3DGS relies heavily on positional gradients to decide where more Gaussians are needed, but these gradients often vanish in textureless regions—such as blank walls, which are common in real estate interiors. Turbo GS proposes a hybrid strategy that combines both color and positional gradients, allowing the system to compensate for weak signals in one domain with stronger cues in the other \cite{lu2024turbogsaccelerating3dgaussian}.
+
+This hybrid strategy is especially relevant to this project. Indoor scenes frequently include smooth, uniformly colored surfaces—like ceilings, painted walls, or flooring—that are essential for understanding space but often underrepresented in reconstructions. By incorporating color gradients into the densification process, Turbo GS ensures these critical regions receive adequate coverage. In adapting this approach, I plan to further refine the strategy to suit typical room layouts and common architectural features.
+
+Turbo GS also introduces a selective densification mechanism based on usage frequency. Gaussians that are visited frequently during training—meaning they contribute meaningfully to rendered views—are eligible to be split. In contrast, Gaussians that are visited less often have their visitation threshold halved, making them easier to phase out. A fixed upper limit on the total number of Gaussians keeps the model efficient and memory-safe \cite{lu2024turbogsaccelerating3dgaussian}. This mechanism may also be adapted in my project by incorporating domain-specific heuristics, such as emphasizing furniture edges, windows, or structural boundaries where visual clarity is important.
+
+Another key innovation is budget scheduling. The authors observe that the rate of improvement in model performance follows a predictable pattern and apply a power-law-based schedule to control the allocation of optimization resources over time. This keeps training steady and avoids over-investment in early or late stages. I plan to explore whether a similar scheduling scheme can be applied or modified in my own implementation to accelerate training on room-scale scenes while maintaining quality \cite{lu2024turbogsaccelerating3dgaussian}.
+
+Finally, Turbo GS also improves the initial Gaussian setup. Using a KD-tree structure built from the sparse point cloud, the system generates additional Gaussians through nearest-neighbor expansion to ensure adequate density before optimization begins. This pre-densification provides a stronger foundation for training \cite{lu2024turbogsaccelerating3dgaussian}. In my project, such an initialization may prove valuable in cases where limited imagery results in sparse reconstructions, helping to fill in gaps before learning starts.
+
+To further accelerate training, Turbo GS renders only a subset of pixels arranged in a chessboard pattern during each iteration. This significantly reduces computational cost while still providing enough visual signal to guide optimization. The result is a dramatic reduction in convergence time: in one test case involving a bicycle scene, Turbo GS reduced training time from 3 hours to just 13 minutes \cite{lu2024turbogsaccelerating3dgaussian}. These gains make Turbo GS particularly attractive for my project as ideally my implementation should be fast and efficient so use in the field is feasible.
+
+\subsection{Expected Methods and Timeline}
+
+In preparation for the fall, I plan to continue work on the project during the summer. By the start of the semester, the goal is to have completed the initial data loader and parser necessary for running the 3D Gaussian Splatting pipeline at the bare minimum. Ideally i should have completed enough work to start at weeks 3-5. 
+
+\textbf{Weeks 1--2:} I will begin the semester by deepening my understanding of the 3D Gaussian Splatting (3DGS) algorithm. This will involve reviewing academic papers and online videos, as well as running small-scale test scripts to clarify the mathematical formulation and implementation steps involved.
+
+\textbf{Weeks 3--5:} I will begin implementing the baseline 3D Gaussian Splatting algorithm in PyTorch. This includes defining the Gaussian parameter representations, developing the forward rendering pass, and integrating camera pose handling and rasterization. Core libraries such as NumPy and PyTorch will be used, along with any open-source rasterization utilities that comply with project constraints.
+
+\textbf{Week 6:} After the baseline implementation is complete, I will begin exploring the Scaffold-GS and Turbo-GS variants. This will involve reviewing existing codebases (if available), analyzing how anchor points and local splats are integrated, and understanding the differences in initialization and update strategies relative to vanilla 3DGS.
+
+\textbf{Weeks 7--9:} During this period, I will attempt to modify the base 3DGS implementation to incorporate either Scaffold-GS or Turbo-GS features. The goal is to achieve a working variant that reflects the improved fidelity or rendering efficiency reported in these extensions.
+
+\textbf{Weeks 10--11:} These two weeks serve as a buffer to accommodate any delays in the above phases. If previous stages go according to schedule, I will use this time to clean up and modify parameters of the code.
+
+\textbf{Week 12:} I will investigate evaluation metrics, focusing particularly on how to implement LPIPS (Learned Perceptual Image Patch Similarity) to assess perceptual similarity between rendered and ground truth images. 
+
+\textbf{Weeks 13--14:} During these weeks, I will focus on code cleanup and minor optimization. This includes evaluating parameter settings for Gaussian initialization, camera frustum thresholds, and splat spread, as well as testing runtime performance on various synthetic datasets to identify computational bottlenecks.
+
+\textbf{Weeks 15--16:} The final weeks will be dedicated to demonstrating the algorithm on a real-world image capture. I plan to photograph a room on the Occidental College campus and apply the pipeline to generate a faithful 3D Gaussian Splat reconstruction. This serves both as a functional demo and as a qualitative evaluation of the method's ability to generalize to novel scenes.
+
+
+
+\section{Mini Project: Evaluating SfM Tools for Point Cloud Initialization}
+
+\subsection{Motivation and Relation to the Main Project}
+This three-week project was designed to support the broader comps project, which focuses on implementing a fast and visually faithful 3D reconstruction pipeline using Turbo Splatting for real estate visualization. A core dependency of Turbo Splatting is the initialization from a sparse point cloud, which affects both training time and reconstruction fidelity. The purpose of this mini-project was to evaluate two prominent Structure-from-Motion (SfM) tools—COLMAP and OpenSfM—to determine which produces better sparse point clouds for use in downstream Gaussian Splatting.
+
+\subsection{Alignment and Distance Metrics Explained}
+The alignment step in this project was performed using the Kabsch-Umeyama algorithm, a standard method for finding the optimal rigid (or similarity) transformation that aligns two corresponding point sets. The algorithm estimates the rotation, translation, and optionally the scaling factor that minimizes the mean squared error between two sets of 3D points \cite{Lawrence_2019}. In this project, the transformation was computed using matched camera centers extracted from the SfM outputs and ground truth camera poses. The method allows for aligning reconstructed point clouds to a consistent world coordinate frame, which is essential for any meaningful geometric comparison.
+
+To quantify the similarity between the aligned point cloud and the ground truth, I used the Chamfer Distance. This metric measures the average distance between each point in one point cloud to its nearest neighbor in the other cloud \cite{fan2016pointsetgenerationnetwork}. It is symmetric in its full form, but for efficiency and interpretability, I used a one-way Chamfer Distance from the SfM reconstruction to the ground truth. This avoided computing unnecessary distances from dense ground truth areas to potentially sparse reconstruction regions and provided a more practical approximation of reconstruction accuracy.
+
+
+\subsection{Project Overview: What Was Done}
+The first part of the project involved installing and configuring COLMAP and OpenSfM. COLMAP installation was straightforward, but OpenSfM proved challenging due to dependency issues. These were resolved by using Docker to encapsulate the environment and avoid version conflicts.
+
+Next, I identified a suitable dataset that included both photographic inputs and a high-resolution ground truth 3D scan. This was essential for quantitatively comparing the reconstructed point clouds from each SfM tool. I decided on using the eth3d data set which had ground truth point clouds, the base image data set, the necessary camera and image information for Kabsch-Umeyama alignment. The dataset was also effective in that the scenes were indoors which was what i wanted to specialize in.
+
+To enable a comparison that was reasonably fair, I implemented separate alignment pipelines using open3d, numpy, pytorch and other common libraries for each tool based on the Kabsch-Umeyama algorithm. This was due to differences in output format and pose representations, COLMAP used a dot-product-based scaling calculation in its alignment, while OpenSfM required a variance-based scaling method. In addition, the ground truth scans had to be transformed using a uniform transformation matrix to align them with the SfM reconstructions, due to mismatches between scanner and world coordinates.
+
+Once i finished the pipeline and began working on the other data sets, i discovered that OpenSfM reconstructions contained a small number of extreme outlier points that severely distorted visualizations and distance metrics. To address this, a preprocessing step was added to retain only the closest 95\% of points, removing points that were unusually distant from the scene. Consideration was made whether to implement this or not as it may unfairly give advantage to opensfm but without this preprocessing no meaningful comparison could be done.
+
+\subsection{Metrics and Results}
+To evaluate the accuracy of each SfM method, I used the Chamfer Distance between the aligned sparse point cloud and the ground truth scan. Chamfer Distance is a standard metric for comparing two unstructured point sets, as it captures how well one set approximates the other by measuring the average nearest-neighbor distance in both directions. I however chose to use a modified one way chamfer distance from the program output to the ground truth as it was faster. In addition comparing the ground truth to the program output was meaningless. It is widely used in 3D vision literature for evaluating reconstruction quality, particularly in scenarios where the input and reference are both sparse and unordered.
+
+Other common metrics like F-score or completeness require threshold tuning or dense correspondences, which are not robust in the sparse point cloud regime that SfM produces. Similarly, visual similarity metrics like SSIM, PSNR or LPIPS were not appropriate since they apply to rendered images rather than geometric structure.
+
+Chamfer Distances were computed for three scenes (a kicker room, room with pipes and a delivery area) using both COLMAP and OpenSfM outputs. After alignment and outlier removal the results recorded are the speed of the point cloud generation and the chamfer distance shown in the table below.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Tool} & \textbf{Pipe} & \textbf{Kicker} & \textbf{Delivery} \\
+\midrule
+OpenSfM & 1.450 & 6.620 & 21.920 \\
+COLMAP  & 0.238 & 0.876 & 4.271 \\
+\bottomrule
+\end{tabular}
+\caption{Total runtime (real + user + sys) in minutes for each scene using OpenSfM and COLMAP}
+\label{tab:runtime_comparison}
+\end{table}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Tool} & \textbf{Delivery} & \textbf{Kicker} & \textbf{Pipe} \\
+\midrule
+OpenSfM & 0.231245 & 0.184054 & 0.218629 \\
+COLMAP  & 0.234981 & 0.301259 & 0.108913 \\
+\bottomrule
+\end{tabular}
+\caption{Chamfer Distance between reconstructed and ground truth point clouds (lower is better)}
+\label{tab:chamfer_distance_comparison}
+\end{table}
+
+Table~\ref{tab:runtime_comparison} shows a significant runtime advantage for COLMAP across all three scenes. In particular, COLMAP completed the reconstruction for the "pipe" scene in under 0.25 minutes, compared to 1.45 minutes for OpenSfM—a nearly 6× speedup. Similar speedups were observed for "kicker" and "delivery." This speed difference highlights a key benefit of COLMAP: not only is it optimized for performance, but its graphical user interface (GUI) also offers greater flexibility in configuring the reconstruction pipeline. Users can select different camera models, control feature extraction and matching strategies, and tune parameters for sparse reconstruction. In contrast, OpenSfM provides fewer options unless the codebase is modified and built directly, which can be a barrier for experimentation.
+
+Table~\ref{tab:chamfer_distance_comparison} reports the Chamfer Distance between the reconstructed point clouds and ground truth, with lower values indicating better geometric alignment. Somewhat surprisingly, OpenSfM outperformed COLMAP on two of the three scenes ("delivery" and "kicker"). However, this result should be interpreted with caution. For both OpenSfM and COLMAP, extreme outlier points had to be removed before computing Chamfer Distance. In the "pipe" scene, for example, outliers caused the distance to spike to over 140. After filtering, COLMAP showed a much lower Chamfer Distance in that scene (0.108913), suggesting that the unfiltered outputs may skew performance perception.
+
+An alternate explanation for OpenSfM's lower Chamfer Distances in two scenes could be that it generated fewer points overall. A smaller set of points concentrated in certain regions may lead to a lower average distance without necessarily representing the full geometry of the scene. This raises a caveat: lower Chamfer Distance does not always imply higher fidelity—it may simply reflect a lack of coverage. In practice, some OpenSfM reconstructions were observed to lack 360-degree coverage, instead clustering around particular views. A more robust evaluation would include a metric capturing the spatial spread or completeness of the point cloud.
+
+Ultimately, while OpenSfM produced numerically favorable Chamfer Distances in some cases, it was likely only due to the point cloud having less points and also being preprocessed to remove outliers. COLMAP remains more convincing for reconstruction tasks due to its faster runtime, greater configurability, and more consistent spatial coverage. 
+
+For my project since runtime is more important than chamfer distance and that both methods have similar chamfer distances, it is clear that for my project colmap is the better tool.
+
+
+
+
+
+
+
+
+
+\section{Evaluation Metrics}
+
+To evaluate the quality of 3D Gaussian Splatting (3DGS) reconstructions, both visual fidelity and computational performance must be considered. Visual quality is typically assessed using full-reference image similarity metrics, which compare a rendered image to a ground truth photograph of the same scene. The most common of these metrics are PSNR, SSIM, and LPIPS, each offering different insights into how well the reconstruction matches human perception.
+
+\textbf{PSNR} (Peak Signal-to-Noise Ratio) is one of the most widely used and simplest metrics. It is directly related to the Mean Squared Error (MSE) between the predicted and reference images. Its popularity stems from its ease of computation, clear physical interpretation, and straightforward mathematical properties that make it convenient for optimization. However, PSNR has a well-known limitation: it does not correlate well with human perception of image quality. For instance, PSNR would often score a blurred image higher than a noisy one, despite humans typically finding noisy images more acceptable due to preserved edges and structure. This is because PSNR measures pixel-by-pixel differences, ignoring broader structural features of the image \cite{1284395}.
+
+To address this shortcoming, the \textbf{SSIM} (Structural Similarity Index Measure) was proposed. SSIM is based on the idea that human vision is highly sensitive to changes in structural information rather than raw pixel values. Instead of just computing differences, SSIM separates image similarity into three components: luminance (captured via mean intensity), contrast (measured using standard deviation), and structure (measured by normalized covariance, i.e., correlation). This top-down approach models how humans perceive global image structures, and usually performs better than PSNR in evaluating perceptual quality \cite{1284395}.
+
+However, even SSIM has limitations. The paper Understanding SSIM presents an illustrative case: a nearly identical image of Earth from the Moon is modified in two ways—one with a noticeable change in surface brightness, and another with a hidden phrase ("Houston we have a problem") embedded in near-black regions. While humans easily notice the brightness change and largely miss the hidden text, SSIM assigns a larger error to the hidden phrase. This reveals that SSIM, despite modeling structure, can still fail to prioritize changes in salience the way humans do \cite{nilsson2020understandingssim}.
+
+To better align with human visual judgment, the \textbf{LPIPS} (Learned Perceptual Image Patch Similarity) metric was introduced. LPIPS leverages deep neural networks trained for image classification. It computes the difference between high-level activations in a neural network for two image patches, effectively using a pretrained network as a proxy for human perception. Surprisingly, even without fine-tuning, these learned features correlate strongly with human evaluations of similarity. The authors show that LPIPS outperforms traditional metrics by a large margin, and even simple networks trained using unsupervised techniques like multi-stage k-means can outperform SSIM in perceptual tasks \cite{zhang2018unreasonableeffectivenessdeepfeatures}.
+
+In the context of 3DGS-based methods, where rendering speed and hardware limitations are also critical, performance-related metrics such as training time, memory usage, and storage requirements are equally important. Many recent works in the field—including TurboGS \cite{lu2024turbogsaccelerating3dgaussian} and Structure-Aware GS \cite{ververas2024sagsstructureaware3dgaussian}—focus on reducing computational cost without sacrificing rendering quality.
+
+For example, the TurboGS paper reports comparisons using the MipNeRF-360 benchmark dataset. The baseline 3DGS model takes approximately 30 minutes to train per scene, while more optimized approaches like Mini Splatting and EAGLES reduce this to around 20 minutes. TurboGS significantly improves this, completing training in roughly 5 minutes per scene. This represents a substantial speedup, which is critical for real-time or interactive use cases \cite{lu2024turbogsaccelerating3dgaussian}.
+
+In terms of visual quality, TurboGS achieves one of the lowest LPIPS scores (0.210), second only to Mip Splatting (0.188). These low scores indicate high similarity between rendered and ground truth images. While TurboGS does not have the smallest memory footprint—using approximately 240MB compared to just 48MB for Instant-NGP—it still represents a practical middle ground between speed, accuracy, and resource efficiency.
+
+These metrics will be central to evaluating the effectiveness of my final implementation. In addition to LPIPS, I intend to report runtime benchmarks and potentially storage/memory usage if feasible. One limitation is that Chamfer Distance—a geometric metric used for evaluating sparse point clouds—is not always representative of perceptual quality in renderings. This underscores the importance of full-reference perceptual metrics like LPIPS when evaluating downstream synthesis tasks. Moreover, as the project evolves, I may explore additional metrics that capture spatial coverage or point cloud completeness, as some preliminary reconstructions have shown uneven point distributions or biased coverage of scenes.
+
+\section{Ethics}
+
+trade off convenance to validity (related ethics, or existing ethics, accuracy, 5)
+
+Ethical issues concerning real estate and 3D Gaussians often revolve around privacy, data handling, surveillance, and unethical business practices. One clear concern is how a 3D Gaussian splat functions as a hybrid between a photograph and a video. A 3D splat of a property may accidentally include views or details that violate someone’s privacy. For example, capturing the backyard of a home could unintentionally include the neighbor’s face, their children, or personal items in their yard. Similarly, in an apartment setting, capturing shared spaces like hallways or entry areas could inadvertently reveal other tenants or private information.
+
+These issues fall under the National Association of Realtors (NAR) Data Privacy Principles, which emphasize that the collection of personal information must be transparent, its usage appropriate, and that data should not be retained longer than necessary without justification \cite{narDataPrivacyPrinciples}. Capturing and distributing high-detail 3D reconstructions without reviewing the content risks violating these principles, especially as automated reconstruction becomes easier and faster.
+
+As a result, care must be taken when scanning indoor or outdoor spaces to avoid collecting unnecessary or sensitive visual data. This includes adding steps to mask or remove private details before training or sharing any model outputs. In addition splats should only be retained when necessary as the amount of information contained in a splat will often correspond to hundreds of photographs. A common theme in the implementation of this new technology is a trade of between convenience and either validity or privacy, in this case being privacy.
+
+3D Gaussian splats could also be utilized for deception and unethical business practices. Real estate agencies may exploit the visual fidelity of 3D splats to provide a convincing showcase of a property that does not accurately reflect reality. Lighting, color, and other visual aspects could be adjusted or enhanced to present the property in an overly positive light. This raises concerns, as such modifications could mislead potential buyers by concealing flaws or exaggerating favorable conditions.
+
+However, this ethical issue exists in a gray area. Edited or overly polished photographs are already common in real estate listings, and this is part of the reason why in-person visits remain an expected and necessary step in the property-buying process. Nonetheless, if 3D Gaussian splats are to serve as a partial or full replacement for physical tours, stricter controls must be implemented. Guidelines would need to explicitly prohibit any visual alterations or enhancements beyond the original capture. This is an example of how convenience has a potential trade off to accuracy and validity.
+
+This challenge intersects with ongoing research in the field of digital verification and cybersecurity. Ensuring the authenticity of visual data—particularly in high-stakes domains such as journalism, news or real estate requires methods that can guarantee the integrity of image and reconstruction pipelines. One promising development in this direction is Veritas, a system designed to track image validity using zero-knowledge proofs \cite{veritas2024}. Veritas introduces a framework for certifying whether visual data has been altered post-capture, offering a mechanism based on zero knowledge proofs to ensure the reliability and trustworthiness of 3D reconstructions. As digitization becomes ever more practical in commercial settings, such systems may become essential to uphold ethical standards and protect consumer interests.
+
+3D splats can also have an impact in forensics. This emerging technology allows for fast and efficient full-perspective capturing of 3D spaces. It could prove extremely useful in documenting crime scenes digitally—both for preservation and for distribution to other detectives—so that a larger number of investigators can review the scene.
+
+However, this introduces a clear trade-off: convenience versus validity. 3D splats only capture visual information. Tactile or textural qualities—as well as non-visual cues like smell—are completely lost. According to the NIJ’s crime scene integrity guidelines, one critical aspect of proper crime scene documentation is recording whether key evidence, such as blood or other substances, was initially wet or dry \cite{narDataPrivacyPrinciples}. This kind of information cannot be captured by a 3D splat and, if missing, could potentially prove detrimental to the outcome of an investigation.
+
+This technology can also be used in court cases to display crime scenes more vividly, as described in \cite{kowbuz2020crime}. Added digitization of a crime scene has the benefits of better blood spatter and ballistics analysis through simulations, as highlighted in the article \cite{kowbuz2020crime}. An NIJ study highlighting 3D scanners in capturing crime scenes cited that, although the technology was promising, experts preferred videos first, photos second, and 3D scans last. The cost-benefit analysis also showed it was not worthwhile, in addition to practical limitations in the field such as speed and efficiency \cite{nij2021scanning}. I am optimistic that 3D Gaussian splatting can solve most of these issues relating to speed, practical usage, and cost.
+
+
+\printbibliography
+
+\end{document}
